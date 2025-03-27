@@ -87,7 +87,10 @@ jobs:
 
           # Create a pull request using the GitHub CLI
           echo "Creating pull request..."
-          gh auth login --with-token <<< "${GITHUB_TOKEN}"
+          # Clear GITHUB_TOKEN from environment to avoid auth conflicts
+          TEMP_TOKEN="${GITHUB_TOKEN}"
+          unset GITHUB_TOKEN
+          echo "${TEMP_TOKEN}" | gh auth login --with-token
           gh pr create --title "Update Helm chart to version ${VERSION}" \
                       --body "Automatically updates Helm chart to version ${VERSION}" \
                       --base main \
