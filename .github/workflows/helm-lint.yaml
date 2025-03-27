@@ -1,0 +1,53 @@
+name: Helm Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'helm/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'helm/**'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Add Helm repository dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Lint Helm chart
+        run: |
+          cd helm
+          helm lint .
+          helm template . > /tmp/rendered-template.yaml
+
+      - name: Validate Kubernetes manifests
+        uses: instrumenta/kubeval-action@master
+        with:
+          files: /tmp/rendered-template.yaml
+          strict: true
+          ignore_missing_schemas: true
+          kubernetes_version: 1.26.0
+
+      - name: Run Helm Unit Tests (if any)
+        run: |
+          if [ -d "helm/tests" ]; then
+            cd helm
+            helm plugin install https://github.com/quintush/helm-unittest || true
+            helm unittest .
+          else
+            echo "No Helm unit tests found, skipping"
+          fi

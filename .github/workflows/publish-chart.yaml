@@ -1,0 +1,131 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'helm/Chart.yaml'
+      - 'helm/values.yaml'
+      - 'helm/templates/**'
+    tags:
+      - 'chart-*'
+      - 'v*' # Also trigger on version tags
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Add Helm repository dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Bump chart version
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/chart-')
+        run: |
+          # Extract tag and determine whether it's a chart-specific tag
+          TAG=${GITHUB_REF#refs/tags/}
+
+          if [[ $TAG == chart-* ]]; then
+            # Extract version from chart tag (e.g., chart-1.2.3 -> 1.2.3)
+            VERSION=${TAG#chart-}
+          elif [[ $TAG == v* ]]; then
+            # For app version tags, increment the patch version of the chart
+            VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            PATCH=$(echo $VERSION | cut -d. -f3)
+            NEW_PATCH=$((PATCH + 1))
+            VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          fi
+
+          # Update chart version
+          sed -i "s/^version: .*$/version: ${VERSION}/" helm/Chart.yaml
+
+          # Commit changes
+          git add helm/Chart.yaml
+          git commit -m "Bump chart version to ${VERSION}" || echo "No changes to commit"
+          git push
+
+      - name: Set up chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          install_only: true
+
+      - name: Create Helm charts directory
+        run: |
+          mkdir -p .cr-release-packages
+          mkdir -p .cr-index
+
+      - name: Package Helm chart
+        run: |
+          helm package helm/ --destination .cr-release-packages
+
+      - name: Create or update Helm chart repository index
+        run: |
+          # If the gh-pages branch exists, get the current index.yaml
+          if git ls-remote --heads origin gh-pages; then
+            git checkout gh-pages
+            if [ -f "index.yaml" ]; then
+              cp index.yaml .cr-index/
+            fi
+            git checkout -
+          fi
+
+          # Update the index with the new chart
+          cr index \
+            --owner ${{ github.repository_owner }} \
+            --git-repo ${{ github.event.repository.name }} \
+            --charts-repo https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }} \
+            --package-path .cr-release-packages \
+            --index-path .cr-index/index.yaml
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: |
+            .cr-release-packages/*.tgz
+            .cr-index/index.yaml
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .cr-index
+          publish_branch: gh-pages
+          keep_files: true
+
+      - name: Upload chart packages
+        run: |
+          # Create charts directory if it doesn't exist in gh-pages
+          git checkout gh-pages
+          mkdir -p charts
+          cp .cr-release-packages/*.tgz charts/
+          git add charts/
+          git commit -m "Upload chart packages" || echo "No changes to commit"
+          git push origin gh-pages

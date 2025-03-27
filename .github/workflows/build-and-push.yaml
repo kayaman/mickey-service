@@ -1,0 +1,98 @@
+name: Build and Push
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - 'helm/**'
+      - '**.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'helm/**'
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./src
+        run: npm ci
+
+      - name: Run tests
+        working-directory: ./src
+        run: npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    # Skip push for PRs, but still build the image
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.CR_PAT }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Helm chart appVersion
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          # Update appVersion in Chart.yaml to match the new release
+          sed -i "s/^appVersion: .*$/appVersion: \"${VERSION}\"/" helm/Chart.yaml
+
+          # Update values.yaml default image tag
+          sed -i "s/tag: .*$/tag: \"${VERSION}\"/" helm/values.yaml
+
+          # Commit changes back to the repo
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add helm/Chart.yaml helm/values.yaml
+          git commit -m "Update Helm chart to version ${VERSION}" || echo "No changes to commit"
+          git push
