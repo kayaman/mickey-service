@@ -1,80 +1,117 @@
-name: Release Helm Chart
+name: Build and Push
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'helm/Chart.yaml'
-      - 'helm/values.yaml'
-      - 'helm/templates/**'
-    tags:
-      - 'chart-*'
-      - 'v*' # Also trigger on version tags
+    tags: ['v*']
+    paths-ignore:
+      - 'helm/**'
+      - '**.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'helm/**'
+      - '**.md'
   workflow_dispatch:
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  release:
+  # test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: Set up Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'npm'
+  #         cache-dependency-path: src/package-lock.json
+
+  #     - name: Install dependencies
+  #       working-directory: ./src
+  #       run: npm ci
+
+  # - name: Run tests
+  #   working-directory: ./src
+  #   run: npm test
+
+  build-and-push:
+    # needs: test
     runs-on: ubuntu-latest
+    # Skip push for PRs, but still build the image
     permissions:
-      contents: write
+      contents: read
+      packages: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.10.0
 
-      - name: Install Helm
-        uses: azure/setup-helm@v3
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3.4.0
         with:
-          version: 'latest'
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.CR_PAT }}
 
-      - name: Add Helm repository dependencies
-        run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo update
-
-      - name: Bump chart version
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/chart-')
-        run: |
-          # Extract tag and determine whether it's a chart-specific tag
-          TAG=${GITHUB_REF#refs/tags/}
-
-          if [[ $TAG == chart-* ]]; then
-            # Extract version from chart tag (e.g., chart-1.2.3 -> 1.2.3)
-            VERSION=${TAG#chart-}
-          elif [[ $TAG == v* ]]; then
-            # For app version tags, increment the patch version of the chart
-            VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
-            MAJOR=$(echo $VERSION | cut -d. -f1)
-            MINOR=$(echo $VERSION | cut -d. -f2)
-            PATCH=$(echo $VERSION | cut -d. -f3)
-            NEW_PATCH=$((PATCH + 1))
-            VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-          fi
-
-          # Update chart version
-          sed -i "s/^version: .*$/version: ${VERSION}/" helm/Chart.yaml
-
-          # Commit changes
-          git add helm/Chart.yaml
-          git commit -m "Bump chart version to ${VERSION}" || echo "No changes to commit"
-          git push origin main
-
-      # Set up Helm chart-releaser
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        env:
-          CR_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          config: .github/cr.yaml
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
-      # Optional: You can add here a step to push chart to another registry
-      # For example OCI registry instead of GitHub Pages
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Helm chart appVersion
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          # Create a new branch based on main for these changes
+          git fetch origin main:refs/remotes/origin/main
+          git checkout -b update-helm-chart-${VERSION} origin/main
+
+          # Update appVersion in Chart.yaml to match the new release
+          sed -i "s/^appVersion: .*$/appVersion: \"${VERSION}\"/" helm/Chart.yaml
+
+          # Update values.yaml default image tag
+          sed -i "s/tag: .*$/tag: \"${VERSION}\"/" helm/values.yaml
+
+          # Commit changes back to the repo
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add helm/Chart.yaml helm/values.yaml
+          git commit -m "Update Helm chart to version ${VERSION}" || echo "No changes to commit"
+
+          # Push the changes
+          git push origin update-helm-chart-${VERSION}
+
+          # Create a PR to merge these changes into main
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          gh pr create --title "Update Helm chart to version ${VERSION}" \
+                      --body "Automatically update Helm chart appVersion to ${VERSION}" \
+                      --base main \
+                      --head update-helm-chart-${VERSION}
