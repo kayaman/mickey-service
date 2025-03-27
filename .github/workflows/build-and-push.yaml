@@ -97,6 +97,12 @@ jobs:
           # Commit changes back to the repo
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+
+          # Fetch main branch and switch to it before committing
+          git fetch origin main
+          git checkout main
+
+          # Apply the changes to the main branch
           git add helm/Chart.yaml helm/values.yaml
           git commit -m "Update Helm chart to version ${VERSION}" || echo "No changes to commit"
-          git push
+          git push origin main
