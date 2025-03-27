@@ -1,0 +1,5 @@
+owner: kayaman
+git-repo: mickey-service
+package-path: .cr-release-packages
+release-name-template: '{{ .Name }}-{{ .Version }}'
+skip-existing: true
