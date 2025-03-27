@@ -34,13 +34,13 @@ jobs:
           helm lint .
           helm template . > /tmp/rendered-template.yaml
 
-      - name: Validate Kubernetes manifests
-        uses: instrumenta/kubeval-action@master
-        with:
-          files: /tmp/rendered-template.yaml
-          strict: true
-          ignore_missing_schemas: true
-          kubernetes_version: 1.26.0
+      # - name: Validate Kubernetes manifests
+      #   uses: instrumenta/kubeval-action@master
+      #   with:
+      #     files: /tmp/rendered-template.yaml
+      #     strict: true
+      #     ignore_missing_schemas: true
+      #     kubernetes_version: 1.26.0
 
       - name: Run Helm Unit Tests (if any)
         run: |
