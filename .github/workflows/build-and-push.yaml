@@ -74,8 +74,12 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
+          # Create a unique branch name with timestamp
+          BRANCH_NAME="update-helm-chart-${VERSION}-$(date +%s)"
+          echo "Creating branch: ${BRANCH_NAME}"
+
           # Create and checkout a new branch
-          git checkout -b update-helm-chart-${VERSION}
+          git checkout -b ${BRANCH_NAME}
 
           # Add changed files and commit
           git add helm/Chart.yaml helm/values.yaml
@@ -83,7 +87,7 @@ jobs:
 
           # Push to the new branch using the token for authentication
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
-          git push origin update-helm-chart-${VERSION}
+          git push origin ${BRANCH_NAME}
 
           # Create a pull request using the GitHub CLI
           echo "Creating pull request..."
@@ -94,4 +98,4 @@ jobs:
           gh pr create --title "Update Helm chart to version ${VERSION}" \
                       --body "Automatically updates Helm chart to version ${VERSION}" \
                       --base main \
-                      --head update-helm-chart-${VERSION} || echo "Failed to create PR"
+                      --head ${BRANCH_NAME} || echo "Failed to create PR"
