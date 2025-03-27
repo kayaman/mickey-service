@@ -57,7 +57,7 @@ jobs:
       - name: Package Helm chart
         run: |
           mkdir -p .cr-release-packages
-          helm package helm/mickey-service -d .cr-release-packages/
+          helm package helm -d .cr-release-packages/
 
       - name: Create or update Helm repo index
         run: |
@@ -81,8 +81,8 @@ jobs:
           mkdir -p .cr-output
 
           # Package the chart
-          echo "Packaging chart from helm/mickey-service directory"
-          helm package helm/mickey-service -d .cr-output
+          echo "Packaging chart from helm directory"
+          helm package helm -d .cr-output
 
           # Create or update index
           echo "Creating index.yaml"
