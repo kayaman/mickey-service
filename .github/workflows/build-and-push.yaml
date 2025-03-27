@@ -49,6 +49,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.10.0
@@ -88,6 +90,10 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
 
+          # Create a new branch based on main for these changes
+          git fetch origin main:refs/remotes/origin/main
+          git checkout -b update-helm-chart-${VERSION} origin/main
+
           # Update appVersion in Chart.yaml to match the new release
           sed -i "s/^appVersion: .*$/appVersion: \"${VERSION}\"/" helm/Chart.yaml
 
@@ -97,12 +103,15 @@ jobs:
           # Commit changes back to the repo
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-
-          # Fetch main branch and switch to it before committing
-          git fetch origin main
-          git checkout main
-
-          # Apply the changes to the main branch
           git add helm/Chart.yaml helm/values.yaml
           git commit -m "Update Helm chart to version ${VERSION}" || echo "No changes to commit"
-          git push origin main
+
+          # Push the changes
+          git push origin update-helm-chart-${VERSION}
+
+          # Create a PR to merge these changes into main
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          gh pr create --title "Update Helm chart to version ${VERSION}" \
+                      --body "Automatically update Helm chart appVersion to ${VERSION}" \
+                      --base main \
+                      --head update-helm-chart-${VERSION}
