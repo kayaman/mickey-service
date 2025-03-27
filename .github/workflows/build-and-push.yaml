@@ -85,33 +85,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Update Helm chart appVersion
+      - name: Update Helm chart version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
 
-          # Create a new branch based on main for these changes
-          git fetch origin main:refs/remotes/origin/main
-          git checkout -b update-helm-chart-${VERSION} origin/main
+          # Output the changes that would be made to the Helm chart
+          echo "Tag version: ${VERSION}"
+          echo "Would update appVersion in helm/Chart.yaml to: ${VERSION}"
+          echo "Would update tag in helm/values.yaml to: ${VERSION}"
 
-          # Update appVersion in Chart.yaml to match the new release
-          sed -i "s/^appVersion: .*$/appVersion: \"${VERSION}\"/" helm/Chart.yaml
-
-          # Update values.yaml default image tag
-          sed -i "s/tag: .*$/tag: \"${VERSION}\"/" helm/values.yaml
-
-          # Commit changes back to the repo
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add helm/Chart.yaml helm/values.yaml
-          git commit -m "Update Helm chart to version ${VERSION}" || echo "No changes to commit"
-
-          # Push the changes
-          git push origin update-helm-chart-${VERSION}
-
-          # Create a PR to merge these changes into main
-          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
-          gh pr create --title "Update Helm chart to version ${VERSION}" \
-                      --body "Automatically update Helm chart appVersion to ${VERSION}" \
-                      --base main \
-                      --head update-helm-chart-${VERSION}
+          # Create summary file with the changes that need to be made manually
+          echo "# Manual Helm Chart Update Required" > $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "A new version tag **v${VERSION}** was created and the Docker image has been built and published." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please update the following files manually:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## helm/Chart.yaml" >> $GITHUB_STEP_SUMMARY
+          echo '```yaml' >> $GITHUB_STEP_SUMMARY
+          echo "appVersion: \"${VERSION}\"" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## helm/values.yaml" >> $GITHUB_STEP_SUMMARY
+          echo '```yaml' >> $GITHUB_STEP_SUMMARY
+          echo "tag: \"${VERSION}\"" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
