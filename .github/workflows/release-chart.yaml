@@ -45,7 +45,7 @@ jobs:
           chart-dirs:
             - helm
           index-path: ./index.yaml
-          release-name-template: "chart-{{ .Version }}"
+          release-name-template: "chart-{{ .appVersion }}"
           pages-branch: main
           pages-index-path: index.yaml
           charts-repo-url: https://kayaman.github.io/mickey-service
