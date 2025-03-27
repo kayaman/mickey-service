@@ -84,15 +84,6 @@ jobs:
 
       - name: Create or update Helm chart repository index
         run: |
-          # If the gh-pages branch exists, get the current index.yaml
-          if git ls-remote --heads origin gh-pages; then
-            git checkout gh-pages
-            if [ -f "index.yaml" ]; then
-              cp index.yaml .cr-index/
-            fi
-            git checkout -
-          fi
-
           # Update the index with the new chart
           cr index \
             --owner ${{ github.repository_owner }} \
