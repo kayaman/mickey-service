@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.10.0
@@ -63,59 +65,58 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          
+
           # Update appVersion in Chart.yaml to match the new release
           sed -i "s/^appVersion: .*$/appVersion: \"${VERSION}\"/" helm/Chart.yaml
-          
+
           # Update values.yaml default image tag
           sed -i "s/tag: .*$/tag: \"${VERSION}\"/" helm/values.yaml
-          
+
           # Configure git with a personal access token that has repo scope
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          
+
           # Create a unique branch name with timestamp
           BRANCH_NAME="update-helm-chart-${VERSION}-$(date +%s)"
           echo "Creating branch: ${BRANCH_NAME}"
-          
+
           # Create and checkout a new branch
           git checkout -b ${BRANCH_NAME}
-          
+
           # Add changed files and commit
           git add helm/Chart.yaml helm/values.yaml
           git commit -m "Update Helm chart to version ${VERSION}" || echo "No changes to commit"
-          
+
           # Push to the new branch using the token for authentication
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git push origin ${BRANCH_NAME}
-          
+
           # Create a pull request using the GitHub CLI
           echo "Creating pull request..."
           # Clear GITHUB_TOKEN from environment to avoid auth conflicts
           TEMP_TOKEN="${GITHUB_TOKEN}"
           unset GITHUB_TOKEN
           echo "${TEMP_TOKEN}" | gh auth login --with-token
-          
+
           # Create PR and capture the PR number
           PR_URL=$(gh pr create --title "Update Helm chart to version ${VERSION}" \
-                      --body "Automatically updates Helm chart to version ${VERSION}" \
-                      --base main \
-                      --head ${BRANCH_NAME})
-          
+                    --body "Automatically updates Helm chart to version ${VERSION}" \
+                    --base main \
+                    --head "${BRANCH_NAME}")
+
           echo "Created PR: ${PR_URL}"
-          
+
           if [ -n "${PR_URL}" ]; then
             # Extract PR number from URL
-            PR_NUMBER=$(echo $PR_URL | grep -o '[0-9]*
-)
+            PR_NUMBER=$(echo $PR_URL | grep -o '[0-9]*$')
             
             echo "Approving and merging PR #${PR_NUMBER}..."
             
             # Approve the PR (auto-approve since it's our own PR)
-            gh pr review ${PR_NUMBER} --approve
+            gh pr review "${PR_NUMBER}" --approve
             
             # Merge the PR
-            gh pr merge ${PR_NUMBER} --auto --squash
+            gh pr merge "${PR_NUMBER}" --auto --squash
             
             echo "PR #${PR_NUMBER} has been approved and merged"
           else
