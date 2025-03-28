@@ -15,6 +15,7 @@
   "author": "Marco Antonio Gonzalez Junior <m@rco.sh>",
   "license": "UNLICENSED",
   "devDependencies": {
+    "@types/express": "^5.0.1",
     "@types/node": "^22.13.10",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
@@ -25,5 +26,8 @@
     "prettier": "^3.5.3",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
   }
 }

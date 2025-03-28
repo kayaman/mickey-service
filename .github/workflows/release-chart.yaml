@@ -1,12 +1,15 @@
 name: Release Helm Chart
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'helm/**'
-      - '.github/workflows/helm-release.yaml'
-    tags: ['chart-v*']
+  workflows: ['Bump Version']
+    types:
+      - completed
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'helm/**'
+  #     - '.github/workflows/helm-release.yaml'
+  #   tags: ['chart-v*']
   workflow_dispatch: # Allow manual trigger
 
 permissions:

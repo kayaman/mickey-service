@@ -1,4 +1,4 @@
-name: Bump Helm chart version
+name: Bump Version
 
 on:
   push:

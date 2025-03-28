@@ -1,32 +1,22 @@
-import ConsoleLogger from './utils/console_logger.ts'
+import express, { type Request, type Response } from 'express'
+import apiRoutes from './routes/index.ts'
 import type { Logger } from './utils/logger.ts'
+import ConsoleLogger from './utils/console_logger.ts'
 
-class MickeyService {
-  constructor(private readonly logger: Logger) {}
-
-  readonly phrases = [
-    "H-Hey everybody! It's me, Mickey Mouse!",
-    'Everybody says, "Oh, Toodles!"',
-    "We've got ears! Say cheers!",
-    'We\'ve used all our Mousketools! Say "Super Cheers!"',
-    'What a hot dog day!',
-    'Meeska, Mooska, Mickey Mouse!',
-    'The telescope will help us see things far away.',
-    'The mystery mouseketool is a super-duper camera!',
-  ]
-
-  public sayRandomPhrase(): void {
-    const randomPhrase = this.phrases[Math.floor(Math.random() * this.phrases.length)]
-    this.logger.info(randomPhrase)
-  }
-}
+const app = express()
+const PORT = process.env.PORT || 7001
 
 const logger: Logger = new ConsoleLogger()
-const mickey = new MickeyService(logger)
+logger.info('Starting the application...')
 
-setInterval(
-  () => {
-    mickey.sayRandomPhrase()
-  },
-  Math.floor(Math.random() * (5000 - 1000 + 1)) + 1000,
-)
+app.use(express.json())
+app.use('/api/v1', apiRoutes)
+
+app.get('/health', (req: Request, res: Response) => {
+  logger.debug('Health check endpoint hit')
+  res.status(200).send('👌🏻')
+})
+
+app.listen(PORT, () => {
+  logger.info(`Server is running on port ${PORT}`)
+})

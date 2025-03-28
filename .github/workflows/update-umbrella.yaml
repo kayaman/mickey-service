@@ -1,0 +1,48 @@
+name: Update Umbrella Chart
+
+on:
+  workflow_run:
+    workflows: ['Bump Version']
+    types:
+      - completed
+    branches: [main]
+    paths:
+      - 'helm/**'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: latest
+
+      - name: Checkout umbrella repository
+        uses: actions/checkout@v3
+        with:
+          repository: kayaman/disneyland
+          path: umbrella
+          token: ${{ secrets.UMBRELLA_REPO_PAT }}
+
+      - name: Copy chart to umbrella repository
+        run: |
+          mkdir -p umbrella/charts/mickey
+          cp -r helm/* umbrella/charts/mickey/
+          cd umbrella
+          git add charts/mickey
+          git commit -m "Update Mickey chart to latest version" || echo "No changes to commit"
+          git push || echo "No changes to push"
