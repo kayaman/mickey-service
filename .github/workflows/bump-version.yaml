@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'helm/**'
-      - '.github/workflows/helm-release.yaml'
+      - '.github/workflows/bump-version.yaml'
     tags: ['chart-v*']
   workflow_dispatch:
 
@@ -39,7 +39,7 @@ jobs:
 
       - name: Add Helm repository dependencies
         run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add mickey-service https://kayaman.github.io/mickey-service
           helm repo update
 
       - name: Update Helm chart version
